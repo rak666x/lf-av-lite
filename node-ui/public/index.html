@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LF-AV-Lite MVP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <h1>LF-AV-Lite MVP</h1>
+        <p class="subtitle">On-demand scanner (local, offline, safe)</p>
+      </div>
+      <div class="badge">Windows 11</div>
+    </header>
+
+    <section class="card">
+      <h2>Settings</h2>
+      <div class="row">
+        <label class="switch">
+          <input id="heuristicsToggle" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+        <span>Heuristics enabled</span>
+
+        <div class="spacer"></div>
+
+        <label class="select-label">
+          Storage
+          <select id="storageSelect">
+            <option value="json">JSON</option>
+            <option value="sqlite">SQLite</option>
+          </select>
+        </label>
+
+        <button id="saveSettingsBtn" class="btn secondary">Save</button>
+      </div>
+      <p class="muted small" id="settingsStatus"></p>
+    </section>
+
+    <!-- ONE unified scan card -->
+    <section class="card">
+      <div class="row">
+        <h2>Scan</h2>
+        <div class="spacer"></div>
+        <div class="tabs">
+          <button class="tab active" id="tabFile">File</button>
+          <button class="tab" id="tabDir">Directory</button>
+        </div>
+      </div>
+
+      <!-- FILE PANEL -->
+      <div class="panel active" id="panelFile">
+        <div class="stack">
+          <label class="small muted">Scan by path</label>
+          <div class="row">
+            <input id="filePath" type="text" placeholder="C:\path\to\file.exe" />
+            <button id="scanFileBtn" class="btn">Scan</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <label class="small muted">Upload & scan (local only)</label>
+          <div class="row">
+            <input id="filePicker" type="file" />
+            <button id="uploadScanBtn" class="btn secondary">Upload & Scan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- DIRECTORY PANEL -->
+      <div class="panel" id="panelDir">
+        <div class="stack">
+          <label class="small muted">Scan directory by path</label>
+          <input id="dirPath" type="text" placeholder="C:\path\to\folder" />
+          <label class="checkbox">
+            <input id="recursiveToggle" type="checkbox" checked />
+            Recursive
+          </label>
+          <button id="scanDirBtn" class="btn">Scan directory</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Offline signature update</h2>
+      <div class="row">
+        <input id="sigPath" type="text" placeholder="C:\path\to\signatures_update.json" />
+        <button id="updateSigsBtn" class="btn secondary">Update</button>
+      </div>
+      <p class="muted small">This merges validated hashes into your local signatures database.</p>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <h2>Results</h2>
+        <div class="spacer"></div>
+        <button id="clearBtn" class="btn ghost">Clear</button>
+        <button id="loadHistoryBtn" class="btn ghost">Load history</button>
+      </div>
+      <div id="output" class="output"></div>
+    </section>
+
+    <footer class="footer">
+      <p class="small muted">
+        AV-Lite is an educational defensive tool. No real-time protection, no system modification.
+      </p>
+    </footer>
+  </div>
+
+  <!-- App controller for the local UI -->
+  <script src="app.js"></script>
+</body>
+</html>

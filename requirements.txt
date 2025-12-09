@@ -1,0 +1,2 @@
+# LF-AV-LITE uses only standard Python librarys.
+# No external dependencies required.

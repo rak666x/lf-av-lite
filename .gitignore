@@ -1,0 +1,17 @@
+# Node
+node-ui/node_modules/
+node-ui/package-lock.json
+
+# Python
+__pycache__/
+*.pyc
+
+# App data that should not be committed
+data/scan_history.json
+data/scan_history.db
+data/uploads/
+data/settings.json
+
+# OS
+.DS_Store
+Thumbs.db

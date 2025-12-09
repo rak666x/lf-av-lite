@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "updated": "2025-01-01",
+  "hashes": {
+    "sha256": [
+      "0000000000000000000000000000000000000000000000000000000000000000",
+      "1111111111111111111111111111111111111111111111111111111111111111",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "notes": "Fake/test hashes for educational use ONLY. These do not correspond to real malware."
+  }
+}
