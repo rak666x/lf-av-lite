@@ -74,9 +74,9 @@ You should still keep Windows Defender (or another real AV) turned on.
 
 From the project root:
 
-```bash
-pip install -r requirements.txt
-```
+LF-AV-LITE uses only standard Python librarys.
+
+No external dependencies required.
 
 Make sure Python 3.x is installed and on your PATH.
 
