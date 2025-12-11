@@ -80,7 +80,7 @@ No external dependencies required.
 
 Make sure Python 3.x is installed and on your PATH.
 
-### 2) Node UI - Not fully updated
+### 2) Node UI - v1.1 not implemented 
 
 From the project root:
 
