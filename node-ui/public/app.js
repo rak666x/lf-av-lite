@@ -37,6 +37,8 @@
     clearBtn: $("clearBtn"),
     loadHistoryBtn: $("loadHistoryBtn"),
     output: $("output"),
+	
+	exclusionsInput: $("exclusionsInput"),
   };
 
   // ---- Adjust these if your Express routes differ
@@ -161,7 +163,16 @@
     const summary = data.summary || {};
     const results = Array.isArray(data.results) ? data.results : [];
     const flagged = results.filter((r) => r.status && r.status !== "clean");
+	
+	const dur = data.duration !== undefined && data.duration !== null
+	  ? `${data.duration}s`
+	  : "";
 
+	const durRow = dur
+	  ? `<div><span class="k">Duration</span><span class="v">${escapeHtml(dur)}</span></div>`
+	  : "";
+
+	
     const pillClass = flagged.length ? "pill warn" : "pill clean";
     const pillText = flagged.length ? `${flagged.length} flagged` : "clean";
 
@@ -178,14 +189,15 @@
       </div>
     `;
 
-    const kv = `
-      <div class="kv">
-        <div><span class="k">Target</span><span class="v mono">${escapeHtml(data.target || "")}</span></div>
-        <div><span class="k">Heuristics</span><span class="v">${data.heuristics_enabled ? "on" : "off"}</span></div>
-        <div><span class="k">Storage</span><span class="v">${escapeHtml(data.storage || "")}</span></div>
-        <div><span class="k">Files scanned</span><span class="v">${summary.files_scanned ?? results.length ?? 0}</span></div>
-      </div>
-    `;
+	const kv = `
+	  <div class="kv">
+		<div><span class="k">Target</span><span class="v mono">${escapeHtml(data.target || "")}</span></div>
+		<div><span class="k">Heuristics</span><span class="v">${data.heuristics_enabled ? "on" : "off"}</span></div>
+		<div><span class="k">Storage</span><span class="v">${escapeHtml(data.storage || "")}</span></div>
+		<div><span class="k">Files scanned</span><span class="v">${summary.files_scanned ?? results.length ?? 0}</span></div>
+		${durRow}
+	  </div>
+	`;
 
     const flaggedHtml = flagged.length
       ? flagged.map((r) => {
@@ -227,80 +239,118 @@
         </details>
       </div>
     `;
-  }
+	}
 
-  function renderHistory(data) {
-    // Accept either {items:[...]} or an array
-    const items = Array.isArray(data) ? data : (data && data.items) || [];
-    if (!items.length) {
-      return `<div class="muted small">No history found yet.</div>`;
-    }
+	function renderHistory(data) {
+	  const safe = data || {};
 
-    const rows = items.slice(0, 50).map((h) => {
-      const ts = h.timestamp || "";
-      const target = h.target || "";
-      const flagged = (h.summary && h.summary.flagged) ?? h.flagged_count ?? 0;
-      const mode = h.mode || "";
-      return `
-        <div class="file-row">
-          <div class="row">
-            <div class="pill ${flagged ? "warn" : "clean"}">${flagged ? `${flagged} flagged` : "clean"}</div>
-            <div class="muted small">${escapeHtml(mode)}</div>
-          </div>
-          <div class="muted small">${escapeHtml(ts)}</div>
-          <div class="file-path mono">${escapeHtml(target)}</div>
-        </div>
-      `;
-    }).join("");
+	  // Accept either {history:[...]} or a direct array
+	  const items = Array.isArray(safe)
+		? safe
+		: Array.isArray(safe.history)
+		  ? safe.history
+		  : safe.history || [];
 
-    return `
-      <div class="result-wrap">
-        <div class="result-header">
-          <div>
-            <div class="result-title">Scan history (latest)</div>
-            <div class="result-meta">Showing up to 50 entries</div>
-          </div>
-        </div>
-        <div class="stack">${rows}</div>
-      </div>
-    `;
-  }
+	  if (!items.length) {
+		return `<div class="muted small">No history found yet.</div>`;
+	  }
+
+	  const rows = items.slice(0, 50).map((h) => {
+		const ts = h.timestamp || "";
+		const files = h.summary?.files_scanned ?? 0;
+		const flagged = h.summary?.flagged ?? 0;
+		const dur = h.duration !== undefined && h.duration !== null
+		  ? `${h.duration}s`
+		  : "";
+
+		return `
+		  <div class="file-row">
+			<div class="row">
+			  <div class="pill ${flagged ? "warn" : "clean"}">
+				${flagged ? `${flagged} flagged` : "clean"}
+			  </div>
+			  <div class="muted small">${escapeHtml(h.mode || "")}</div>
+			</div>
+
+			<div class="muted small">
+			  ${escapeHtml(ts)}
+			  • ${files} files
+			  ${dur ? " • " + dur : ""}
+			</div>
+
+			<div class="file-path mono">${escapeHtml(h.target || "")}</div>
+		  </div>
+		`;
+	  }).join("");
+
+	  return `
+		<div class="result-wrap">
+		  <div class="result-header">
+			<div>
+			  <div class="result-title">Scan history (latest)</div>
+			  <div class="result-meta">Showing up to 50 entries</div>
+			</div>
+		  </div>
+		  <div class="stack">${rows}</div>
+		</div>
+	  `;
+	}
 
   // ---- Actions
-  async function loadSettings() {
-    try {
-      const data = await safeJsonFetch(ENDPOINTS.settings);
-      if (typeof data.heuristics_enabled === "boolean") {
-        els.heuristicsToggle.checked = data.heuristics_enabled;
-      }
-      if (data.storage) {
-        els.storageSelect.value = data.storage;
-      }
-      setStatus("Settings loaded.");
-    } catch (err) {
-      // Fail softly; defaults on UI
-      setStatus("Could not load settings (using UI defaults).", false);
-    }
-  }
+	async function loadSettings() {
+	  try {
+		const data = await safeJsonFetch(ENDPOINTS.settings);
 
-  async function saveSettings() {
-    const payload = {
-      heuristics_enabled: !!els.heuristicsToggle.checked,
-      storage: els.storageSelect.value || "json",
-    };
+		if (typeof data.heuristics_enabled === "boolean") {
+		  els.heuristicsToggle.checked = data.heuristics_enabled;
+		}
+		if (data.storage) {
+		  els.storageSelect.value = data.storage;
+		}
 
-    setBusy(true);
-    try {
-      await jsonPost(ENDPOINTS.settings, payload);
-      setStatus("Settings saved.");
-      setOutput(`<div class="muted small">Settings updated.</div>`);
-    } catch (err) {
-      setStatus(`Settings error: ${err.message}`, false);
-      setOutput(`<div class="muted small">Settings update failed.</div>`);
-    } finally {
-      setBusy(false);
-    }
-  }
+		if (els.exclusionsInput) {
+		  if (data.exclusions !== undefined && data.exclusions !== null) {
+			els.exclusionsInput.value = Array.isArray(data.exclusions)
+			  ? data.exclusions.join(", ")
+			  : String(data.exclusions);
+		  } else {
+			els.exclusionsInput.value = "";
+		  }
+		}
+
+		setStatus("Settings loaded.");
+	  } catch (err) {
+		setStatus("Could not load settings (using UI defaults).", false);
+	  }
+	}
+
+	async function saveSettings() {
+	  const exclusions = els.exclusionsInput
+		? (els.exclusionsInput.value || "")
+			.split(/[,\n]+/)
+			.map(s => s.trim())
+			.filter(Boolean)
+		: [];
+
+	  const payload = {
+		heuristics_enabled: !!els.heuristicsToggle.checked,
+		storage: els.storageSelect.value || "json",
+		exclusions
+	  };
+
+	  setBusy(true);
+	  try {
+		await jsonPost(ENDPOINTS.settings, payload);
+		setStatus("Settings saved.");
+		setOutput(`<div class="muted small">Settings updated.</div>`);
+	  } catch (err) {
+		setStatus(`Settings error: ${err.message}`, false);
+		setOutput(`<div class="muted small">Settings update failed.</div>`);
+	  } finally {
+		setBusy(false);
+	  }
+	}
+
 
   async function scanFileByPath() {
     const path = (els.filePath.value || "").trim();

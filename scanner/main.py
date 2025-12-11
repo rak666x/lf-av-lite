@@ -1,7 +1,13 @@
 import argparse
 import json
+import time
+import zipfile
+import tempfile
+import shutil
 from pathlib import Path
 from typing import Dict, List
+
+
 
 from .utils import (
     iso_now, bool_from_str, normalize_storage,
@@ -120,17 +126,108 @@ def read_history(storage: str):
         return read_history_sqlite()
     return read_history_json()
 
+def scan_archive(path: Path, heuristics_enabled: bool, sig_set) -> List[Dict]:
+    """
+    Scan a ZIP/JAR archive by extracting its contents to a temp directory,
+    scanning each extracted file with scan_one_file, and returning a list
+    of result dicts. Nested archives (zip-in-zip) are *not* recursively
+    extracted – they’re flagged heuristically instead.
+    """
+    results: List[Dict] = []
+
+    # Temp dir inside data dir if possible
+    try:
+        from .utils import get_data_dir
+        base_dir = get_data_dir()
+    except Exception:
+        base_dir = Path("data")
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="unpack_", dir=base_dir))
+
+    try:
+        try:
+            zf = zipfile.ZipFile(path, "r")
+        except zipfile.BadZipFile:
+            # Not a valid ZIP, treat as suspicious
+            results.append({
+                "path": str(path),
+                "sha256": "",
+                "status": "heuristic_flag",
+                "risk_score": 25,
+                "reasons": ["Invalid or corrupted ZIP/JAR archive."]
+            })
+            return results
+
+        for member in zf.namelist():
+            # skip directories
+            if not member or member.endswith("/"):
+                continue
+
+            # Detect nested archives (zip/jar inside zip/jar) and don't recurse
+            lower_name = member.lower()
+            if lower_name.endswith(".zip") or lower_name.endswith(".jar"):
+                results.append({
+                    "path": f"{path}!{member}",
+                    "sha256": "",
+                    "status": "heuristic_flag",
+                    "risk_score": 50,
+                    "reasons": [f"Nested archive '{member}' not extracted (depth limit)."]
+                })
+                continue
+
+            # Extract and scan this file
+            try:
+                extracted_path = temp_dir / member
+                extracted_path.parent.mkdir(parents=True, exist_ok=True)
+                zf.extract(member, path=temp_dir)
+            except Exception as e:
+                results.append({
+                    "path": f"{path}!{member}",
+                    "sha256": "",
+                    "status": "heuristic_flag",
+                    "risk_score": 10,
+                    "reasons": [f"Could not extract '{member}': {e}"]
+                })
+                continue
+
+            # Use normal single-file scan on the extracted file
+            res = scan_one_file(extracted_path, heuristics_enabled, sig_set)
+            # Rewrite path so user sees the archive context
+            res["path"] = f"{path}!{member}"
+            results.append(res)
+
+    finally:
+        # Clean up temp extraction directory
+        try:
+            shutil.rmtree(temp_dir)
+        except OSError:
+            pass
+
+    return results
 
 def scan_target_file(path: Path, heuristics_enabled: bool, storage: str) -> Dict:
+    start_time = time.time()
+
     sig_obj = load_signatures()
     sig_set = extract_sha256_set(sig_obj)
 
     results: List[Dict] = []
 
-    entry = scan_one_file(path, heuristics_enabled, sig_set)
-    results.append(entry)
+    # If this is an archive, scan its contents instead of treating it as a normal file
+    if path.suffix.lower() in (".zip", ".jar"):
+        inner_results = scan_archive(path, heuristics_enabled, sig_set)
+        results.extend(inner_results)
+        # Count the archive itself + the inner entries
+        files_scanned = 1 + len(inner_results)
+    else:
+        entry = scan_one_file(path, heuristics_enabled, sig_set)
+        results.append(entry)
+        files_scanned = 1
 
     flagged = sum(1 for r in results if r.get("status") != "clean")
+
+    end_time = time.time()
+    duration = round(end_time - start_time, 2)
 
     report = {
         "timestamp": iso_now(),
@@ -139,28 +236,68 @@ def scan_target_file(path: Path, heuristics_enabled: bool, storage: str) -> Dict
         "heuristics_enabled": heuristics_enabled,
         "storage": storage,
         "summary": {
-            "files_scanned": 1,
+            "files_scanned": files_scanned,
             "flagged": flagged
         },
+        "duration": duration,
         "results": results
     }
 
     persist_history(storage, report)
     return report
 
-
 def scan_target_dir(path: Path, recursive: bool, heuristics_enabled: bool, storage: str) -> Dict:
+    start_time = time.time()
+
+    # Load exclusions from settings.json (if present)
+    exclude_patterns = []
+    try:
+        try:
+            from .utils import get_data_dir  # optional helper
+            settings_path = get_data_dir() / "settings.json"
+        except Exception:
+            settings_path = Path("data") / "settings.json"
+
+        if settings_path.exists():
+            config = json.loads(settings_path.read_text(encoding="utf8"))
+            exclude_patterns = config.get("exclusions", []) or []
+
+            if isinstance(exclude_patterns, str):
+                exclude_patterns = [
+                    p.strip() for p in exclude_patterns.split(",") if p.strip()
+                ]
+            elif not isinstance(exclude_patterns, list):
+                exclude_patterns = []
+    except Exception:
+        exclude_patterns = []
+
     sig_obj = load_signatures()
     sig_set = extract_sha256_set(sig_obj)
 
     results: List[Dict] = []
     files_scanned = 0
 
-    for f in iter_files_in_dir(path, recursive=recursive):
-        files_scanned += 1
-        results.append(scan_one_file(f, heuristics_enabled, sig_set))
+    try:
+        file_iter = iter_files_in_dir(path, recursive=recursive, excludes=exclude_patterns)
+    except TypeError:
+        # Fallback for older iter_files_in_dir signature without excludes
+        file_iter = iter_files_in_dir(path, recursive=recursive)
+
+    for f in file_iter:
+        # Archive handling
+        if f.suffix.lower() in (".zip", ".jar"):
+            inner_results = scan_archive(f, heuristics_enabled, sig_set)
+            results.extend(inner_results)
+            files_scanned += 1 + len(inner_results)  # archive + contents
+        else:
+            entry = scan_one_file(f, heuristics_enabled, sig_set)
+            results.append(entry)
+            files_scanned += 1
 
     flagged = sum(1 for r in results if r.get("status") != "clean")
+
+    end_time = time.time()
+    duration = round(end_time - start_time, 2)
 
     report = {
         "timestamp": iso_now(),
@@ -172,11 +309,13 @@ def scan_target_dir(path: Path, recursive: bool, heuristics_enabled: bool, stora
             "files_scanned": files_scanned,
             "flagged": flagged
         },
+        "duration": duration,
         "results": results
     }
 
     persist_history(storage, report)
     return report
+
 
 
 def json_ok(payload: Dict) -> None:
@@ -282,7 +421,6 @@ def main():
     except Exception as e:
         json_error("Unexpected error occurred.", code="unexpected", extra={"detail": str(e)})
         raise SystemExit(1)
-
 
 if __name__ == "__main__":
     main()

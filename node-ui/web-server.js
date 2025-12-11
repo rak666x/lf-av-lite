@@ -16,7 +16,11 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-const DEFAULT_SETTINGS = { heuristics_enabled: true, storage: "json" };
+const DEFAULT_SETTINGS = {
+  heuristics_enabled: true,
+  storage: "json",
+  exclusions: []
+};
 
 function loadSettings() {
   try {
@@ -24,10 +28,22 @@ function loadSettings() {
       fs.writeFileSync(SETTINGS_PATH, JSON.stringify(DEFAULT_SETTINGS, null, 2), "utf8");
       return { ...DEFAULT_SETTINGS };
     }
+
     const parsed = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf8"));
+
+    const exclusions = Array.isArray(parsed.exclusions)
+      ? parsed.exclusions
+      : (typeof parsed.exclusions === "string"
+          ? parsed.exclusions
+              .split(/[,\n]+/)
+              .map(s => s.trim())
+              .filter(Boolean)
+          : []);
+
     return {
       heuristics_enabled: !!parsed.heuristics_enabled,
       storage: parsed.storage === "sqlite" ? "sqlite" : "json",
+      exclusions
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -35,10 +51,21 @@ function loadSettings() {
 }
 
 function saveSettings(next = {}) {
+  const exclusions = Array.isArray(next.exclusions)
+    ? next.exclusions
+    : (typeof next.exclusions === "string"
+        ? next.exclusions
+            .split(/[,\n]+/)
+            .map(s => s.trim())
+            .filter(Boolean)
+        : []);
+
   const safe = {
     heuristics_enabled: !!next.heuristics_enabled,
     storage: next.storage === "sqlite" ? "sqlite" : "json",
+    exclusions
   };
+
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(safe, null, 2), "utf8");
   return safe;
 }

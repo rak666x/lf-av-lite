@@ -1,162 +1,212 @@
-# LF-AV-Lite MVP (v1)
+# LF-AV-Lite (v1.1 MVP)
 
-LF-AV-Lite is a small educational on-demand antivirus-style scanner built for Windows 11.
-This is a defensive learning project, not a replacement for Windows Defender.
+**LF-AV-Lite** is a small on-demand AV-style scanner for **Windows 11**.
 
-It demonstrates how an AV pipeline can work at a high level:
+---
 
-offline signatures (SHA-256)
+## What this is ✅
 
-explainable heuristics
+This project **is**:
 
-EICAR test detection
+* a safe MVP to demo core AV ideas
+* a small **Node + Python** app you can read and extend
+* focused on **Windows 11**, but the core logic is portable
 
-scan history
+---
 
-offline signature updates
+## What this is not ❌
 
-No real-time monitoring in v1.
+This project is **not**:
 
-## What this is (and isn’t)
-✅ This is:
+* a production antivirus
+* a real-time protection tool
+* something that disables or replaces Windows Defender
+* evasion, stealth, or malware code
+* a tool for bypassing security controls
 
-a safe MVP to demonstrate core AV concepts
+You should still keep Windows Defender (or another real AV) turned on.
 
-a clean Node + Python project you can build on
+---
 
-Windows 11-first but should run on other OSes
+## Current Features (v1.1)
 
-## ❌ This is NOT:
+### Scanning
 
-a production antivirus
+* Scan a **single file**
+* Scan a **directory** (with optional recursion)
+* Simple desktop UI (Electron) that talks to a Python backend:
 
-a real-time protection tool
+  * choose file / folder
+  * see scan progress and results
 
-something that disables or replaces Windows Defender
+### Detection
 
-evasion, stealth, or malware code
+* **SHA-256 signature checks** (offline, local list)
+* Explainable **heuristics**, including:
 
-## Features (v1)
+  * suspicious extensions
+  * double extensions (`invoice.pdf.exe`, `resume.docx.js`, etc.)
+  * file header vs extension mismatch (e.g. PE file named `.txt`)
+  * optional basic entropy signal (simple “this looks packed/weird” hint)
+* **EICAR test** detection (standard AV test string, not real malware)
 
-Scan a single file
+  * clearly labeled as a *harmless* test signature
 
-Scan a directory (optional recursive)
+### History & Storage
 
-SHA-256 signature checks (offline)
+* **Scan history**:
 
-Balanced heuristics:
+  * default: simple **JSON** file
+  * optional: **SQLite** history backend
+* Option to load and review past scan results
 
-suspicious extensions
+### Offline Signature Updates
 
-double-extension masquerading
+* Signatures are stored locally in JSON
+* Supports **offline updates** from a local JSON file
+* Basic validation so a broken update file doesn’t trash the DB
 
-file header vs extension mismatch
+---
 
-optional basic entropy signal
+## Install & Setup
 
-EICAR test detection (safe demo)
+### 1) Python backend
 
-Scan history
+From the project root:
 
-JSON default
-
-SQLite optional
-
-Offline signature update from a local JSON file
-
-## Install
-1) Python
-
-From the root:
-
+```bash
 pip install -r requirements.txt
+```
 
-## 2) Node UI
+Make sure Python 3.x is installed and on your PATH.
+
+### 2) Node UI - Not fully updated
+
+From the project root:
+
+```bash
 cd node-ui
 npm install
+```
 
-Desktop UI (Electron)
-cd node-ui
+### 3) Desktop UI (Electron)
+
+From inside `node-ui`:
+
+```bash
 npm run desktop
+```
 
-You can also launch it from the root
+Or, run
 
 run-desktop.bat
 
-## Safe demo (recommended)
-1) EICAR test
+This starts the desktop UI, which sends scan requests to the Python scanner.
 
-Create a file named:
+---
 
-eicar_test.txt
+## Safe Demo: EICAR Test
 
-Paste this exact line:
+You can test that detection works using the standard **EICAR** test string (used by AV vendors, not real malware).
 
-X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
+1. Create a file named:
 
+   ```text
+   eicar_test.txt
+   ```
 
-Then scan it using the desktop UI.
+2. Paste this exact line into the file:
 
-Expected result:
+   ```text
+   X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*
+   ```
 
-status: eicar_test
+3. Save the file.
 
-high risk score
+4. Open LF-AV-Lite and scan `eicar_test.txt` from the desktop UI.
 
-reason clearly labeled as a harmless test signature
+**Expected result:**
 
-## 2) Heuristic demo (no malware)
+* detection status similar to: `eicar_test`
+* high risk score
+* reason clearly marked as a **harmless test signature**
 
-Rename any harmless file to:
+If that doesn’t show up, the signature pipeline probably isn’t wired correctly.
 
-invoice.pdf.exe
+---
 
-resume.docx.js
+## Heuristic Demo (No Malware Needed)
 
-Scan it.
+You can also see the heuristics in action using normal files:
 
-Expected result:
+1. Take any harmless file (for example `notes.txt`).
 
-heuristic_flag
+2. Rename it to something sketchy, like:
 
-reasons explaining why it looks suspicious
+   * `invoice.pdf.exe`
+   * `resume.docx.js`
 
-Offline signature updates
+3. Scan that renamed file with LF-AV-Lite.
 
-The update file format:
+**Expected result:**
 
+* a heuristic-based detection (e.g. `heuristic_flag`)
+* reasons that explain:
+
+  * double extension
+  * executable pretending to be a document
+  * why that’s suspicious
+
+This is a simple way to test “common sense” checks without touching real malware.
+
+---
+
+## Offline Signature Update Format
+
+Update files are plain JSON. Example:
+
+```json
 {
   "version": "1.0",
   "updated": "YYYY-MM-DD",
   "hashes": {
     "sha256": [
-      "..."
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     ]
   }
 }
+```
 
+How to use it:
 
-In the UI, paste the local path and update.
-The engine validates and merges safely.
+1. Create or download a JSON file that matches this structure.
+2. In the UI, paste or browse to the **local path** of that file.
+3. Click **Update**.
 
-## Notes for Windows
+The engine will:
 
-This project is designed to behave like a normal user-space tool.
-It does not require admin privileges for most scans, but some protected folders may fail due to Windows permissions.
+* check that the JSON looks valid
+* merge new hashes into your existing local signatures
 
-Roadmap (v2 ideas)
+---
 
-cleaner history viewer for SQLite
+## Windows Notes
 
-configurable heuristic scoring weights
+* Designed to run as a **normal user-space app**:
 
-exportable reports
+  * Most scans work fine without admin
+  * Some protected folders may fail due to permissions (that’s normal)
+* The project does **not**:
 
-improved filetype coverage
+  * hook into the kernel
+  * try to hide itself
+  * mess with other AV tools
 
-better scan performance for large folders
+If a file or folder can’t be scanned, the app should tell you instead of silently ignoring it.
+
+---
 
 ## License
 
-Educational/portfolio use.
-If you reuse this, please keep the safety + defensive intent statement.
+Intended to be open source. Still Building.

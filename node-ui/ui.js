@@ -30,6 +30,10 @@ function printScanSummary(report) {
   console.log("------------------------------");
   console.log(`Files scanned: ${summary?.files_scanned ?? 0}`);
   console.log(`Flagged:       ${summary?.flagged ?? 0}`);
+	
+  if (duration !== undefined && duration !== null) {
+    console.log(`Duration:      ${duration} seconds`);
+  }
 
   const flagged = (results || []).filter(r => r.status !== "clean");
 

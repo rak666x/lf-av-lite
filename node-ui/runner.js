@@ -123,7 +123,8 @@ function ensureDataSettingsFile() {
   if (!fs.existsSync(settingsPath)) {
     const defaultSettings = {
       heuristics_enabled: true,
-      storage: "json"
+      storage: "json",
+      exclusions: []
     };
     fs.writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2), "utf8");
   }
@@ -138,22 +139,45 @@ function loadSettings() {
     const parsed = JSON.parse(raw);
 
     const heuristics_enabled =
-      typeof parsed.heuristics_enabled === "boolean" ? parsed.heuristics_enabled : true;
+      typeof parsed.heuristics_enabled === "boolean"
+        ? parsed.heuristics_enabled
+        : true;
 
     const storage = parsed.storage === "sqlite" ? "sqlite" : "json";
 
-    return { heuristics_enabled, storage, settingsPath };
+    const exclusions = Array.isArray(parsed.exclusions)
+      ? parsed.exclusions
+      : (typeof parsed.exclusions === "string"
+          ? parsed.exclusions
+              .split(/[,\n]+/)
+              .map(s => s.trim())
+              .filter(Boolean)
+          : []);
+
+    return { heuristics_enabled, storage, exclusions, settingsPath };
   } catch (_) {
-    return { heuristics_enabled: true, storage: "json", settingsPath };
+    return { heuristics_enabled: true, storage: "json", exclusions: [], settingsPath };
   }
 }
 
-function saveSettings(next) {
+function saveSettings(next = {}) {
   const settingsPath = ensureDataSettingsFile();
+
+  const exclusions = Array.isArray(next.exclusions)
+    ? next.exclusions
+    : (typeof next.exclusions === "string"
+        ? next.exclusions
+            .split(/[,\n]+/)
+            .map(s => s.trim())
+            .filter(Boolean)
+        : []);
+
   const payload = {
     heuristics_enabled: !!next.heuristics_enabled,
-    storage: next.storage === "sqlite" ? "sqlite" : "json"
+    storage: next.storage === "sqlite" ? "sqlite" : "json",
+    exclusions
   };
+
   fs.writeFileSync(settingsPath, JSON.stringify(payload, null, 2), "utf8");
   return payload;
 }

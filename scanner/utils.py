@@ -1,7 +1,8 @@
 import os
+import fnmatch
 from pathlib import Path
 from datetime import datetime
-from typing import Iterator, Optional, Tuple
+from typing import Iterator, Optional, Tuple, List
 
 
 def get_base_dir() -> Path:
@@ -35,25 +36,61 @@ def safe_is_dir(p: Path) -> bool:
 
 def iter_files_in_dir(
     directory: Path,
-    recursive: bool = True
+    recursive: bool = True,
+    excludes: Optional[List[str]] = None
 ) -> Iterator[Path]:
-    """
-    Yield files in a directory safely.
-    """
     if not safe_is_dir(directory):
         return
 
+    # Normalize patterns: to lowercase and / separators
+    raw_patterns = excludes or []
+    norm_patterns = [
+        str(p).replace("\\", "/").lower().rstrip("/")
+        for p in raw_patterns
+        if str(p).strip()
+    ]
+
+    def is_excluded(p: Path) -> bool:
+        s = p.as_posix().lower()
+        for pat in norm_patterns:
+            if not pat:
+                continue
+            # If pattern has glob chars, use fnmatch
+            if any(ch in pat for ch in "*?[]"):
+                if fnmatch(s, pat):
+                    return True
+            else:
+                # Treat as prefix: exclude everything under that path
+                if s.startswith(pat):
+                    return True
+        return False
+
     try:
         if recursive:
-            for root, _, files in os.walk(directory):
+            for root, dirs, files in os.walk(directory):
+                root_path = Path(root)
+
+                # Optionally prune directories based on exclusions
+                dirs[:] = [
+                    d for d in dirs
+                    if not is_excluded(root_path / d)
+                ]
+
                 for f in files:
-                    yield Path(root) / f
+                    file_path = root_path / f
+                    if not safe_is_file(file_path):
+                        continue
+                    if is_excluded(file_path):
+                        continue
+                    yield file_path
         else:
             for child in directory.iterdir():
-                if safe_is_file(child):
-                    yield child
+                if not safe_is_file(child):
+                    continue
+                if is_excluded(child):
+                    continue
+                yield child
     except PermissionError:
-        # caller will handle counting/notes; we just stop iteration here
         return
     except Exception:
         return
